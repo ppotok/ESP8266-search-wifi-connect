@@ -1,26 +1,21 @@
-/*
-*Description in README. I am sorry for mess in code.
-*
-*/
-
-
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
-#include <WiFiUdp.h>
-#include <Time.h>
 
+const int ledPin =  2;
+int ledState = LOW; 
+unsigned long previousMillis = 0; 
+int ledtimer=20000;
 
 enum {
   APPLICATION_WEBSERVER = 0,
   ACCESS_POINT_WEBSERVER
 };
 
-//MDNSResponder mdns;
 ESP8266WebServer server(80);
 
 const char* ssid = "Bubbles";  // Use this as the ssid as well
 // as the mDNS name
-const char* passphrase = ""; // Here you can put your passphrase for wifi in AP mode
+const char* passphrase = "";
 
 int actualtime[5]; //for showing time
 
@@ -28,52 +23,26 @@ String st;
 String content;
 unsigned long lasttime = 0;
 //----HMTL start and end string
-String start = "<!DOCTYPE HTML>\n<html>\n<head>\n<title>Potokovo</title>\n<meta charset='UTF-8'></head>\n<body>";
+String start = "<!DOCTYPE HTML>\n<html>\n<head>\n<title>ppotok :-P</title>\n<meta charset=\"UTF-8\"></head>\n<body>";
 String htmlend = "</body></html>";
-//-------------------------
-//-------------------Setup for NTP
-IPAddress timeServer(132, 163, 4, 101); // time-a.timefreq.bldrdoc.gov
-/* Set this to the offset (in seconds) to your local time
-   This example is GMT - 6 
-   */
-//const long timeZoneOffset = -21600L;
 
-//---- +2h for Czech Republic
-int timezone = 2;
-const long timeZoneOffset = timezone*3600;
-/* Syncs to NTP server every 15 seconds for testing,
-   set to 1 hour or more to be reasonable */
-unsigned int ntpSyncTime = 15;
-
-/* ALTER THESE VARIABLES AT YOUR OWN RISK */
-// local port to listen for UDP packets
-unsigned int localPort = 8888;
-// NTP time stamp is in the first 48 bytes of the message
-const int NTP_PACKET_SIZE = 48;
-// Buffer to hold incoming and outgoing packets
-byte packetBuffer[NTP_PACKET_SIZE];
-// A UDP instance to let us send and receive packets over UDP
-WiFiUDP Udp;
-
-unsigned long ntpLastUpdate = 0;
-// Check last time clock displayed (Not in Production)
-time_t prevDisplay = 0;
 //--------------------------
 
 void setup() {
+  pinMode(ledPin, OUTPUT);
+  digitalWrite ( ledPin, 0 );
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);  // Assume we've already been configured
-  //  Serial.setDebugOutput(true);
-  // WiFi.printDiag(Serial);
+  Serial.setDebugOutput(true);
+  //WiFi.printDiag(Serial);
+  Serial.println("Test for wifi");
   if (testWifi()) {
     setupApplication(); // WiFi established, setup application
   } else {
+  
     setupAccessPoint(); // No WiFi yet, enter configuration mode
   }
-  int trys = 0;
-  while (!getTimeAndDate() && trys < 10) {
-    trys++;
-  }
+
 }
 
 bool testWifi(void) {
@@ -81,18 +50,18 @@ bool testWifi(void) {
   Serial.println("\nWaiting for Wifi to connect...");
   while ( c < 20 ) {
     if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("wifi connected");
       return true;
     }
     delay(500);
     Serial.print(WiFi.status());
     c++;
   }
-  Serial.println("\nConnect timed out, opening AP");
+Serial.println("\nConnect timed out, opening AP");
   return false;
 }
 
 void setupApplication() {
-
   launchWeb(APPLICATION_WEBSERVER); // In this example just launch a
   // web server
 }
@@ -160,23 +129,24 @@ void launchWeb(int webservertype) {
 //---------------------------------------------------------------SETUP of Webpages
 void setupWebServerHandlers(int webservertype)
 {
-  if ( webservertype == ACCESS_POINT_WEBSERVER ) { // AP mode webpages
+  if ( webservertype == ACCESS_POINT_WEBSERVER ) {
     server.on("/", handleDisplayAccessPoints);
     server.on("/setap", handleSetAccessPoint);
     server.onNotFound(handleNotFound);
   }
-  else if (webservertype == APPLICATION_WEBSERVER) { // serving pages when ESP is connected to wifi
+  else if (webservertype == APPLICATION_WEBSERVER) { // serving pages when ESP is connected
     server.on("/", handleRoot);
     server.on("/setap", handleAccessPointAlreadySet);
 
-server.on ( "/time", []() { server.send ( 200, "text/plain", getactualtime() );  } );
-  server.on ( "/date", []() { server.send ( 200, "text/plain", getactualdate() );  } );
+/*server.on ( "/time", []() { server.send ( 200, "text/plain", getactualtime() );  } );
+  server.on ( "/date", []() { server.send ( 200, "text/plain", getactualdate() );  } );*/
     
     server.onNotFound(handleNotFound);
   }
 }
-//--------------------------------------------------------------- End of SETUP of Webpages
+//---------------------------------------------------------------SETUP of Webpages
 void handleDisplayAccessPoints() {
+  ledtimer=500;
   IPAddress ip = WiFi.softAPIP();
   String ipStr = String(ip[0]) + '.' + String(ip[1]) + '.' + String(ip[2]) + '.' + String(ip[3]);
   uint8_t mac[6];
@@ -237,8 +207,10 @@ void handleSetAccessPoint() {
 }
 
 void handleRoot() {
-
+  ledtimer=1000;
+  digitalWrite(ledPin, LOW);
   content = start + " This is on / of server" + htmlend;
+  digitalWrite(ledPin, HIGH);
   server.send(200, "text/html", content);
 }
 
@@ -261,15 +233,10 @@ void handleAccessPointAlreadySet() {
   content += "</p>";
   content += htmlend;
   server.send(200, "text/html", content);
+  
 }
 
-void handledate(){
- content=getactualtime();
- content+=" - ";
- content+=getactualdate();
-  server.send(200, "text/plain", content);
-}
-//------------------END of Webpages
+//-------------------------------------------------END of Webpages
 void handleNotFound() {
   content = "File Not Found\n\n";
   content += "URI: ";
@@ -284,140 +251,32 @@ void handleNotFound() {
   }
   server.send(404, "text/plain", content);
 }
+
+
 //------------------------------------LOOP----------------------------------------------------
 void loop() {
   server.handleClient();  // In this example we're not doing too much
-
-  // Update the time via NTP server as often as the time you set at the top
-  if (now() - ntpLastUpdate > ntpSyncTime) {
-    int trys = 0;
-    while (!getTimeAndDate() && trys < 10) {
-      trys++;
+ /*  
+  *   if (WiFi.status() == WL_CONNECTED) {
+     ledtimer=2500;
     }
-    if (trys < 10) {
-      Serial.println("ntp server update success");
-    }
-    else {
-      Serial.println("ntp server update failed");
-    }
-  }
+    */
+    unsigned long currentMillis = millis();
+ 
+  if(currentMillis - previousMillis >=ledtimer) {
+    // save the last time you blinked the LED 
+    previousMillis = currentMillis;   
 
-  if (millis() - lasttime >= 10000) {
-    lasttime = millis();
-    Serial.print(getactualtime());
-    Serial.print(" - ");
-    Serial.println(getactualdate());
+    // if the LED is off turn it on and vice-versa:
+    if (ledState == LOW)
+      ledState = HIGH;
+    else
+      ledState = LOW;
 
+    // set the LED with the ledState of the variable:
+    digitalWrite(ledPin, ledState);
   }
 }
-
-String getactualtime() {
-  String actualtime = "";
-  if (hour() < 10) {
-    actualtime = "0";
-  }
-  actualtime += hour();
-  actualtime += ":";
-  if (minute() < 10) {
-    actualtime += "0";
-  }
-  actualtime += minute();
-  actualtime += ":";
-  if (second() < 10) {
-    actualtime += "0";
-  }
-  actualtime += second();
-  return actualtime;
-}
-
-String getactualdate() {
-  String actualdate = "";
-  if (day() < 10) {
-    actualdate = "0";
-  }
-  actualdate += day();
-  actualdate += "/";
-  if (month() < 10) {
-    actualdate += "0";
-  }
-  actualdate += month();
-  actualdate += "/";
-  actualdate += year();
-  return actualdate;
-
-}
-
-//----------NTP Part start
-// Do not alter this function, it is used by the system
-
-int getTimeAndDate() {
-  int flag = 0;
-  Udp.begin(localPort);
-  sendNTPpacket(timeServer);
-  delay(1000);
-  if (Udp.parsePacket()) {
-    Udp.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
-    unsigned long highWord, lowWord, epoch;
-    highWord = word(packetBuffer[40], packetBuffer[41]);
-    lowWord = word(packetBuffer[42], packetBuffer[43]);
-    epoch = highWord << 16 | lowWord;
-    epoch = epoch - 2208988800 + timeZoneOffset;
-    flag = 1;
-    setTime(epoch);
-    ntpLastUpdate = now();
-  }
-  return flag;
-}
-
-// Do not alter this function, it is used by the system
-unsigned long sendNTPpacket(IPAddress& address)
-{
-  memset(packetBuffer, 0, NTP_PACKET_SIZE);
-  packetBuffer[0] = 0b11100011;
-  packetBuffer[1] = 0;
-  packetBuffer[2] = 6;
-  packetBuffer[3] = 0xEC;
-  packetBuffer[12]  = 49;
-  packetBuffer[13]  = 0x4E;
-  packetBuffer[14]  = 49;
-  packetBuffer[15]  = 52;
-  Udp.beginPacket(address, 123);
-  Udp.write(packetBuffer, NTP_PACKET_SIZE);
-  Udp.endPacket();
-}
-
-// Clock display of the time and date, save it into array and print
-void clockDisplay() {
-  actualtime[0] = hour();
-  actualtime[1] = minute();
-  actualtime[2] = second();
-  actualtime[3] = day();
-  actualtime[4] = month();
-  actualtime[5] = year();
-  //-----------------
-
-  for (int i = 0; i <= 2; i++) {
-    Serial.print(actualtime[i]);
-    Serial.print(":");
-  }
-  Serial.print(" - ");
-  for (int i = 3; i <= 5; i++) {
-    Serial.print(actualtime[i]);
-    Serial.print("/");
-  }
-  Serial.println();
-}
-
-// Utility function for clock display: prints preceding colon and leading 0
-int printDigits(int digits) {
-  Serial.print(":");
-  if (digits < 10)
-    Serial.print('0');
-  //Serial.print(digits);
-  return digits;
-}
-
-//----------NTP END
 
 String macToStr(const uint8_t* mac)
 {
