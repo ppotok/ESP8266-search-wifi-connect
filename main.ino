@@ -179,7 +179,7 @@ server.onFileUpload([](){
       server.sendHeader("Connection", "close");
       server.sendHeader("Access-Control-Allow-Origin", "*");
       server.send(200, "text/plain", (Update.hasError())?"FAIL":"OK");
-      ESP.restart();
+      abort();
     });
     /*UPDATE PART*/
 /*server.on ( "/time", []() { server.send ( 200, "text/plain", getactualtime() );  } );
